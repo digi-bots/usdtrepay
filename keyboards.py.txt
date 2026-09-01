@@ -1,0 +1,40 @@
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+
+def main_menu_keyboard():
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💰 Balance"), KeyboardButton(text="🔗 Referral")],
+            [KeyboardButton(text="↘️ Withdraw")]
+        ],
+        resize_keyboard=True
+    )
+    return kb
+
+def channel_keyboard(channel_username):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Join Channel", url=f"https://t.me/{channel_username}")],
+            [InlineKeyboardButton(text="✅ Check Membership", callback_data="check_membership")]
+        ]
+    )
+    return kb
+
+def wallet_network_keyboard():
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="BEP20 (BSC)", callback_data="network_bep20")],
+            [InlineKeyboardButton(text="TRC20 (TRON)", callback_data="network_trc20")]
+        ]
+    )
+    return kb
+
+def admin_withdrawal_keyboard(withdrawal_id):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{withdrawal_id}"),
+                InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{withdrawal_id}")
+            ]
+        ]
+    )
+    return kb

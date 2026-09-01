@@ -1,0 +1,145 @@
+import sqlite3
+from datetime import datetime
+from config import DATABASE_FILE
+
+def get_db():
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            email TEXT,
+            wallet TEXT,
+            wallet_network TEXT,
+            balance REAL DEFAULT 0.0,
+            referral_count INTEGER DEFAULT 0,
+            referred_by INTEGER,
+            join_date TEXT,
+            registered INTEGER DEFAULT 0
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS withdrawals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            wallet TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            request_date TEXT NOT NULL,
+            processed_date TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def add_user(user_id, username, first_name, referred_by=None):
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now().isoformat()
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, username, first_name, referred_by, join_date, balance) VALUES (?,?,?,?,?,0.0)",
+        (user_id, username, first_name, referred_by, now)
+    )
+    conn.commit()
+    conn.close()
+
+def get_user(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def update_user(user_id, **kwargs):
+    conn = get_db()
+    cur = conn.cursor()
+    set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
+    values = list(kwargs.values()) + [user_id]
+    cur.execute(f"UPDATE users SET {set_clause} WHERE user_id = ?", values)
+    conn.commit()
+    conn.close()
+
+def is_wallet_used(wallet):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id FROM users WHERE wallet = ?", (wallet,))
+    row = cur.fetchone()
+    conn.close()
+    return row is not None
+
+def add_balance(user_id, amount):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
+    conn.commit()
+    conn.close()
+
+def increment_referral_count(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET referral_count = referral_count + 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+def add_withdrawal(user_id, amount, wallet):
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now().isoformat()
+    cur.execute(
+        "INSERT INTO withdrawals (user_id, amount, wallet, status, request_date) VALUES (?,?,?,'pending',?)",
+        (user_id, amount, wallet, now)
+    )
+    conn.commit()
+    conn.close()
+
+def get_pending_withdrawals():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM withdrawals WHERE status = 'pending'")
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def update_withdrawal_status(withdrawal_id, status):
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now().isoformat()
+    cur.execute(
+        "UPDATE withdrawals SET status = ?, processed_date = ? WHERE id = ?",
+        (status, now, withdrawal_id)
+    )
+    conn.commit()
+    conn.close()
+
+def get_all_users():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id FROM users WHERE registered = 1")
+    users = [row["user_id"] for row in cur.fetchall()]
+    conn.close()
+    return users
+
+def get_user_count():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) as count FROM users WHERE registered = 1")
+    count = cur.fetchone()["count"]
+    conn.close()
+    return count
+
+def get_total_balance():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT SUM(balance) as total FROM users WHERE registered = 1")
+    total = cur.fetchone()["total"]
+    conn.close()
+    return total or 0.0
