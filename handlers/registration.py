@@ -73,7 +73,7 @@ async def process_wallet_address(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Registration complete!\n\n"
         f"🎁 You received {JOIN_BONUS} USDT joining bonus.\n"
-        f"💰 Your balance: {user['balance'] + JOIN_BONUS:.2f} USDT\n\n"
+        f"💰 Your balance: {user['balance']:.2f} USDT\n\n"
         f"Use the menu below to explore:",
         reply_markup=main_menu_keyboard()
     )
