@@ -5,7 +5,13 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN, PORT
 from database import init_db
-from handlers import routers
+from handlers.start import router as start_router
+from handlers.registration import router as registration_router
+from handlers.user import router as user_router
+from handlers.admin import router as admin_router
+from handlers.broadcast import router as broadcast_router
+
+routers = [start_router, registration_router, user_router, admin_router, broadcast_router]
 
 # বট ও ডিসপ্যাচার
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
