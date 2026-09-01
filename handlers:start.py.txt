@@ -1,0 +1,64 @@
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import CommandStart, CommandObject
+from aiogram.fsm.context import FSMContext
+import database as db
+from keyboards import channel_keyboard, main_menu_keyboard
+from utils import check_channel_membership, anti_flood, logger
+
+router = Router()
+
+@router.message(CommandStart())
+async def start_command(message: Message, state: FSMContext, bot, command: CommandObject = None):
+    user_id = message.from_user.id
+    username = message.from_user.username or "unknown"
+    first_name = message.from_user.first_name or "User"
+
+    if not await anti_flood(user_id):
+        await message.answer("⏳ Please wait a moment before trying again.")
+        return
+
+    # রেফারেল আর্গুমেন্ট
+    referrer_id = None
+    if command and command.args:
+        args = command.args
+        if args.isdigit():
+            referrer_id = int(args)
+            if referrer_id == user_id:
+                referrer_id = None
+
+    db.add_user(user_id, username, first_name, referred_by=referrer_id)
+
+    # চ্যানেল মেম্বারশিপ চেক
+    if await check_channel_membership(bot, user_id):
+        user = db.get_user(user_id)
+        if user and user['registered'] == 1:
+            await message.answer("🎉 Welcome back to USDT Repay Bot! Use the menu below.", reply_markup=main_menu_keyboard())
+        else:
+            from handlers.registration import start_registration
+            await start_registration(message, state)
+    else:
+        await message.answer(
+            "👋 Welcome to USDT Repay Bot!\n\n"
+            "To continue, you must join our official channel.\n"
+            "Click the button below, join, then come back and press 'Check Membership'.",
+            reply_markup=channel_keyboard()
+        )
+
+@router.callback_query(F.data == "check_membership")
+async def check_membership_callback(callback: CallbackQuery, state: FSMContext, bot):
+    user_id = callback.from_user.id
+    if not await anti_flood(user_id):
+        await callback.answer("Please wait.", show_alert=True)
+        return
+
+    if await check_channel_membership(bot, user_id):
+        await callback.message.delete()
+        user = db.get_user(user_id)
+        if user and user['registered'] == 1:
+            await callback.message.answer("✅ Membership confirmed! Welcome back.", reply_markup=main_menu_keyboard())
+        else:
+            from handlers.registration import start_registration
+            await start_registration(callback.message, state)
+    else:
+        await callback.answer("❌ You haven't joined the channel yet!", show_alert=True)

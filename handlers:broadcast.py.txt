@@ -1,0 +1,166 @@
+import asyncio
+from aiogram import Router, F
+from aiogram.types import Message
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from states import BroadcastStates
+import database as db
+from config import ADMIN_IDS
+
+router = Router()
+
+def is_admin(message: Message) -> bool:
+    return message.from_user.id in ADMIN_IDS
+
+@router.message(Command("newbroadcast"), is_admin)
+async def new_broadcast(message: Message, state: FSMContext):
+    await message.answer("📢 New broadcast creation.\n\nFirst send a **title**:")
+    await state.set_state(BroadcastStates.waiting_for_title)
+
+@router.message(BroadcastStates.waiting_for_title, is_admin)
+async def process_title(message: Message, state: FSMContext):
+    await state.update_data(title=message.text)
+    await message.answer("✅ Title saved.\n\nNow send the **message body**:")
+    await state.set_state(BroadcastStates.waiting_for_text)
+
+@router.message(BroadcastStates.waiting_for_text, is_admin)
+async def process_text(message: Message, state: FSMContext):
+    await state.update_data(text=message.text)
+    await message.answer(
+        "📸 Now upload one or more **images** (media group supported).\n"
+        "When done, type /done. If you want to skip images, type /skip."
+    )
+    await state.update_data(images=[])
+    await state.set_state(BroadcastStates.waiting_for_media)
+
+@router.message(BroadcastStates.waiting_for_media, F.photo, is_admin)
+async def collect_photos(message: Message, state: FSMContext):
+    data = await state.get_data()
+    images = data.get("images", [])
+    images.append(message.photo[-1].file_id)
+    await state.update_data(images=images)
+    await message.answer("📸 Photo received. Send more or /done.")
+
+@router.message(BroadcastStates.waiting_for_media, Command("skip"), is_admin)
+async def skip_media(message: Message, state: FSMContext):
+    await message.answer("⏭️ Images skipped.\nNow set inline buttons.")
+    await ask_for_buttons(message, state)
+
+@router.message(BroadcastStates.waiting_for_media, Command("done"), is_admin)
+async def done_media(message: Message, state: FSMContext):
+    data = await state.get_data()
+    img_count = len(data.get("images", []))
+    await message.answer(f"📸 {img_count} image(s) saved.\nNow set inline buttons.")
+    await ask_for_buttons(message, state)
+
+async def ask_for_buttons(message: Message, state: FSMContext):
+    await message.answer(
+        "🔘 Want to add inline buttons?\n"
+        "Send in format (one per line):\n"
+        "`Button Name - URL`\n\n"
+        "Example:\n"
+        "`Our Channel - https://t.me/example`\n"
+        "`Support - https://t.me/support`\n\n"
+        "If no buttons, type /skip."
+    )
+    await state.set_state(BroadcastStates.waiting_for_buttons)
+
+@router.message(BroadcastStates.waiting_for_buttons, is_admin)
+async def process_buttons(message: Message, state: FSMContext):
+    lines = message.text.strip().split('\n')
+    buttons = []
+    for line in lines:
+        if '-' in line:
+            name, url = line.rsplit('-', 1)
+            name = name.strip()
+            url = url.strip()
+            if name and url:
+                buttons.append((name, url))
+    if not buttons:
+        await message.answer("❌ No valid buttons found. Try again or /skip.")
+        return
+    await state.update_data(buttons=buttons)
+    await show_preview(message, state)
+
+@router.message(BroadcastStates.waiting_for_buttons, Command("skip"), is_admin)
+async def skip_buttons(message: Message, state: FSMContext):
+    await state.update_data(buttons=[])
+    await show_preview(message, state)
+
+async def show_preview(message: Message, state: FSMContext):
+    data = await state.get_data()
+    title = data.get("title", "")
+    text = data.get("text", "")
+    images = data.get("images", [])
+    buttons = data.get("buttons", [])
+
+    caption = f"<b>{title}</b>\n\n{text}" if title else text
+
+    builder = InlineKeyboardBuilder()
+    for name, url in buttons:
+        builder.button(text=name, url=url)
+    markup = builder.as_markup() if buttons else None
+
+    if images:
+        await message.answer_photo(
+            photo=images[0],
+            caption=caption + "\n\n[Preview] Send /send to confirm, /cancel to abort.",
+            reply_markup=markup
+        )
+    else:
+        await message.answer(
+            caption + "\n\n[Preview] Send /send to confirm, /cancel to abort.",
+            reply_markup=markup
+        )
+
+    await state.set_state(BroadcastStates.confirm_broadcast)
+
+@router.message(BroadcastStates.confirm_broadcast, Command("send"), is_admin)
+async def confirm_send(message: Message, state: FSMContext, bot):
+    data = await state.get_data()
+    title = data.get("title", "")
+    text = data.get("text", "")
+    images = data.get("images", [])
+    buttons = data.get("buttons", [])
+
+    caption = f"<b>{title}</b>\n\n{text}" if title else text
+
+    builder = InlineKeyboardBuilder()
+    for name, url in buttons:
+        builder.button(text=name, url=url)
+    markup = builder.as_markup() if buttons else None
+
+    users = db.get_all_users()
+    success = 0
+    await message.answer(f"🚀 Starting broadcast to {len(users)} users...")
+
+    for uid in users:
+        try:
+            if images:
+                media = []
+                for idx, img_id in enumerate(images):
+                    if idx == 0:
+                        media.append({"type": "photo", "media": img_id, "caption": caption, "parse_mode": "HTML"})
+                    else:
+                        media.append({"type": "photo", "media": img_id})
+                if len(media) > 1:
+                    await bot.send_media_group(uid, media)
+                    if markup:
+                        await bot.send_message(uid, "🔘 Options:", reply_markup=markup)
+                else:
+                    await bot.send_photo(uid, images[0], caption=caption, reply_markup=markup)
+            else:
+                await bot.send_message(uid, caption, reply_markup=markup)
+            success += 1
+        except Exception as e:
+            pass
+        await asyncio.sleep(0.05)
+
+    await message.answer(f"✅ Broadcast finished. {success}/{len(users)} received.")
+    await state.clear()
+
+@router.message(BroadcastStates.confirm_broadcast, Command("cancel"), is_admin)
+async def cancel_broadcast(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Broadcast cancelled.")
