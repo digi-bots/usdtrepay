@@ -1,0 +1,7 @@
+from .start import router as start_router
+from .registration import router as registration_router
+from .user import router as user_router
+from .admin import router as admin_router
+from .broadcast import router as broadcast_router
+
+routers = [start_router, registration_router, user_router, admin_router, broadcast_router]
