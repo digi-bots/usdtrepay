@@ -1,6 +1,6 @@
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")   # Render-এ Environment Variable থেকে নেবে
+BOT_TOKEN = os.getenv("BOT_TOKEN")          # Render-এ Environment Variable থেকে নেবে
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "1604189136").split(",")]
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "usdt_repay")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1004343332067")) if os.getenv("CHANNEL_ID") else None
