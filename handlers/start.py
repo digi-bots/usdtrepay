@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
 import database as db
+from config import CHANNEL_USERNAME
 from keyboards import channel_keyboard, main_menu_keyboard
 from utils import check_channel_membership, anti_flood, logger
 
@@ -18,7 +19,7 @@ async def start_command(message: Message, state: FSMContext, bot, command: Comma
         await message.answer("⏳ Please wait a moment before trying again.")
         return
 
-    # রেফারেল আর্গুমেন্ট
+    # রেফারেল আর্গুমেন্ট (deep link)
     referrer_id = None
     if command and command.args:
         args = command.args
@@ -42,7 +43,7 @@ async def start_command(message: Message, state: FSMContext, bot, command: Comma
             "👋 Welcome to USDT Repay Bot!\n\n"
             "To continue, you must join our official channel.\n"
             "Click the button below, join, then come back and press 'Check Membership'.",
-            reply_markup=channel_keyboard()
+            reply_markup=channel_keyboard(CHANNEL_USERNAME)  # ✅ প্যারামিটার যোগ করা হয়েছে
         )
 
 @router.callback_query(F.data == "check_membership")
